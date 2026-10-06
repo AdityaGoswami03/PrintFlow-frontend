@@ -3,7 +3,6 @@ import type {
   PaperSize,
   PrintConfiguration,
   PrintSide,
-  PrintType,
   PageSelectionType,
 } from '../../types';
 import { Minus, Plus, Layers, Copy, Palette, FileText, AlertCircle } from 'lucide-react';

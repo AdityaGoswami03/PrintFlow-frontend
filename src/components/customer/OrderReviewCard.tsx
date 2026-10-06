@@ -1,6 +1,6 @@
 import React from 'react';
 import type { PrintConfiguration } from '../../types';
-import { FileText, ArrowLeft, Send, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { FileText, ArrowLeft, Send, ShieldCheck } from 'lucide-react';
 
 interface OrderReviewCardProps {
   fileName: string;

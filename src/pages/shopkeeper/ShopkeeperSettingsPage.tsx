@@ -9,7 +9,6 @@ import {
   Check,
   Power,
   ExternalLink,
-  Shield,
   MapPin,
   Phone,
 } from 'lucide-react';
@@ -44,7 +43,15 @@ export const ShopkeeperSettingsPage: React.FC = () => {
         !shop.isAcceptingOrders,
         user?.token
       );
-      setShop(updated);
+      setShop((prev) =>
+        prev
+          ? {
+              ...prev,
+              isOpen: updated.isOpen,
+              isAcceptingOrders: updated.isOpen,
+            }
+          : null
+      );
     } catch (err: unknown) {
       alert((err as Error).message || 'Failed to update store status');
     } finally {

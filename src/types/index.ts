@@ -63,14 +63,14 @@ export interface Shop {
   id: string;
   _id?: string;
   publicId: string;
-  slug: string;
-  publicIdentifier: string;
+  slug?: string;
+  publicIdentifier?: string;
   name: string;
-  isOpen: boolean;
+  isOpen?: boolean;
   isAcceptingOrders: boolean; // Alias for isOpen
   contactNumber?: string;
   address?: ShopAddress | string;
-  pricing: BackendPricingConfig;
+  pricing: BackendPricingConfig | PricingConfig;
   createdAt?: string;
 }
 
@@ -78,7 +78,7 @@ export interface OrderDocument {
   storageKey?: string;
   originalName: string;
   mimeType?: string;
-  fileSizeBytes: number;
+  fileSizeBytes?: number;
   fileSize?: number;
   totalPages: number;
   downloadUrl?: string;
@@ -132,8 +132,8 @@ export interface Order {
   customerNotes?: string;
   customerName?: string;
   document: OrderDocument;
-  printConfig: OrderPrintConfig;
-  pricing: OrderPricing;
+  printConfig?: OrderPrintConfig;
+  pricing?: OrderPricing;
   statusHistory?: StatusHistoryEntry[];
   createdAt: string;
   updatedAt?: string;

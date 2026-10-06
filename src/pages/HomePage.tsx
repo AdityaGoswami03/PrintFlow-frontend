@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Printer, Smartphone, LayoutDashboard, QrCode, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Printer, Smartphone, LayoutDashboard, ArrowRight, CheckCircle2 } from 'lucide-react';
 
 export const HomePage: React.FC = () => {
   return (
