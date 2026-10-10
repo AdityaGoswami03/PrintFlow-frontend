@@ -1,22 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import type { Order, OrderStatus } from '../../types';
 import { shopkeeperService } from '../../services/shopkeeperService';
 import { useAuth } from '../../context/AuthContext';
 import { StatusBadge } from '../../components/common/Badge';
 import { OrderActionButtons } from '../../components/shopkeeper/OrderActionButtons';
+import { PdfPreviewModal } from '../../components/common/PdfPreviewModal';
 import {
   ArrowLeft,
   FileText,
   Download,
-  View,
-  CheckCircle,
+  Printer,
   AlertTriangle,
   Clock,
   User,
   Phone,
-  Layers,
-  Copy,
   Calendar,
   ExternalLink,
 } from 'lucide-react';
@@ -31,9 +29,10 @@ export const ShopkeeperOrderDetailsPage: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Document URL state
+  // Document URL & Preview state
   const [isFetchingDocUrl, setIsFetchingDocUrl] = useState(false);
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [previewDocUrl, setPreviewDocUrl] = useState<string | null>(null);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 
   // Rejection modal state
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -71,12 +70,31 @@ export const ShopkeeperOrderDetailsPage: React.FC = () => {
     }
   };
 
+  const handleOpenPreviewAndPrint = async () => {
+    if (!order) return;
+    if (previewDocUrl) {
+      setIsPreviewModalOpen(true);
+      return;
+    }
+
+    try {
+      setIsFetchingDocUrl(true);
+      const res = await shopkeeperService.getDocumentSignedUrl(order.id, user?.token);
+      setPreviewDocUrl(res.downloadUrl);
+      setIsPreviewModalOpen(true);
+    } catch (err: unknown) {
+      alert((err as Error).message || 'Unable to load document for preview and printing');
+    } finally {
+      setIsFetchingDocUrl(false);
+    }
+  };
+
   const handleFetchSecureDocUrl = async () => {
     if (!order) return;
     try {
       setIsFetchingDocUrl(true);
       const res = await shopkeeperService.getDocumentSignedUrl(order.id, user?.token);
-      setDownloadUrl(res.downloadUrl);
+      setPreviewDocUrl(res.downloadUrl);
       // Open in secure new tab
       window.open(res.downloadUrl, '_blank', 'noopener,noreferrer');
     } catch (err: unknown) {
@@ -186,20 +204,35 @@ export const ShopkeeperOrderDetailsPage: React.FC = () => {
                       {order.document.originalName}
                     </div>
                     <div style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)' }}>
-                      {formatFileSize(order.document.fileSize)} • Total doc: {order.document.totalPages} pages
+                      {formatFileSize(order.document.fileSize || order.document.fileSizeBytes || 0)} • Total doc: {order.document.totalPages} pages
                     </div>
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={handleFetchSecureDocUrl}
-                  disabled={isFetchingDocUrl}
-                >
-                  <View size={18} />
-                  {isFetchingDocUrl ? 'Generating URL...' : 'View PDF'}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={handleOpenPreviewAndPrint}
+                    disabled={isFetchingDocUrl}
+                    id="preview-and-print-button"
+                  >
+                    <Printer size={18} />
+                    {isFetchingDocUrl ? 'Loading...' : 'Preview & Print'}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={handleFetchSecureDocUrl}
+                    disabled={isFetchingDocUrl}
+                    title="Open or download PDF directly in a new tab"
+                    id="view-download-pdf-button"
+                  >
+                    <Download size={18} />
+                    View / Download
+                  </button>
+                </div>
               </div>
 
               <div style={{ marginTop: '0.85rem', fontSize: '0.75rem', color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-primary-border)', paddingTop: '0.65rem' }}>
@@ -408,6 +441,22 @@ export const ShopkeeperOrderDetailsPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* PDF Preview & Native Print Modal */}
+        <PdfPreviewModal
+          isOpen={isPreviewModalOpen}
+          onClose={() => setIsPreviewModalOpen(false)}
+          fileUrl={previewDocUrl}
+          fileName={order.document.originalName}
+          orderNumber={order.orderNumber}
+          totalPages={order.document.totalPages}
+          configInfo={{
+            copies: order.config.copies,
+            printType: order.config.printType,
+            paperSize: order.config.paperSize,
+            side: order.config.side,
+          }}
+        />
       </main>
     </>
   );

@@ -8,10 +8,8 @@ import {
   User,
   Store,
   Phone,
-  MapPin,
   AlertCircle,
   ArrowRight,
-  ShieldCheck,
 } from 'lucide-react';
 
 export const ShopkeeperRegisterPage: React.FC = () => {
