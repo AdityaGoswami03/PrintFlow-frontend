@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   FileText,
   Download,
+  View,
   CheckCircle,
   AlertTriangle,
   Clock,
@@ -196,8 +197,8 @@ export const ShopkeeperOrderDetailsPage: React.FC = () => {
                   onClick={handleFetchSecureDocUrl}
                   disabled={isFetchingDocUrl}
                 >
-                  <Download size={18} />
-                  {isFetchingDocUrl ? 'Generating URL...' : 'View / Download PDF'}
+                  <View size={18} />
+                  {isFetchingDocUrl ? 'Generating URL...' : 'View PDF'}
                 </button>
               </div>
 

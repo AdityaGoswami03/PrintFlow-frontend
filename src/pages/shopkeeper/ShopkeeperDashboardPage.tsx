@@ -289,7 +289,7 @@ export const ShopkeeperDashboardPage: React.FC = () => {
                       </span>
                     </td>
                     <td>
-                      <div style={{ fontWeight: 600 }}>{order.customerName || 'Walk-in Customer'}</div>
+                      <div style={{ fontWeight: 600 }}>{order.customerName || 'Anonymous'}</div>
                       {order.customerPhone && (
                         <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                           {order.customerPhone}
