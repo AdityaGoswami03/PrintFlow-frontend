@@ -131,7 +131,7 @@ export const shopkeeperService = {
     statusFilter?: OrderStatus,
     search?: string,
     page = 1,
-    limit = 50
+    limit = 10
   ): Promise<OrdersListResponse> {
     const params: Record<string, string | number | undefined> = {
       page,
