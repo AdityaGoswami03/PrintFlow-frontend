@@ -5,6 +5,7 @@ import { shopkeeperService } from '../../services/shopkeeperService';
 import { useAuth } from '../../context/AuthContext';
 import { StatusBadge } from '../../components/common/Badge';
 import { OrderActionButtons } from '../../components/shopkeeper/OrderActionButtons';
+import { Pagination } from '../../components/common/Pagination';
 import {
   Clock,
   Printer,
@@ -14,6 +15,7 @@ import {
   FileText,
   AlertCircle,
   TrendingUp,
+  X,
 } from 'lucide-react';
 
 export const ShopkeeperDashboardPage: React.FC = () => {
@@ -21,6 +23,11 @@ export const ShopkeeperDashboardPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState<Order[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'ALL' | OrderStatus>('ALL');
@@ -29,16 +36,30 @@ export const ShopkeeperDashboardPage: React.FC = () => {
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const loadOrders = async (isManual = false) => {
+  const loadOrders = async (
+    targetPage = currentPage,
+    tab = activeTab,
+    search = searchQuery,
+    size = pageSize,
+    isManual = false
+  ) => {
     try {
       if (isManual) setIsRefreshing(true);
+      else setIsLoading(true);
       setErrorMessage(null);
+
       const res = await shopkeeperService.getOrders(
         user?.token,
-        activeTab === 'ALL' ? undefined : activeTab,
-        searchQuery
+        tab === 'ALL' ? undefined : tab,
+        search,
+        targetPage,
+        size
       );
+
       setOrders(res.orders);
+      setCurrentPage(res.pagination.page);
+      setTotalPages(res.pagination.totalPages || 1);
+      setTotalOrders(res.pagination.total);
     } catch (err: unknown) {
       console.error('Failed to load orders', err);
       setErrorMessage((err as Error).message || 'Failed to load orders from server');
@@ -48,20 +69,54 @@ export const ShopkeeperDashboardPage: React.FC = () => {
     }
   };
 
+  // Fetch initial orders once on mount / token change - NO continuous polling interval
   useEffect(() => {
-    loadOrders();
-    const interval = setInterval(() => {
-      loadOrders();
-    }, 6000); // Polling every 6s for new incoming orders
-    return () => clearInterval(interval);
+    if (user?.token) {
+      loadOrders(1, activeTab, searchQuery, pageSize);
+    }
   }, [user?.token]);
+
+  // Handle page change - Only fetch when user clicks a page number or prev/next
+  const handlePageChange = (newPage: number) => {
+    if (newPage === currentPage || newPage < 1 || newPage > totalPages) return;
+    setCurrentPage(newPage);
+    loadOrders(newPage, activeTab, searchQuery, pageSize);
+  };
+
+  // Handle page size change (e.g. 10, 20, 50 per page)
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize);
+    setCurrentPage(1);
+    loadOrders(1, activeTab, searchQuery, newSize);
+  };
+
+  // Handle status tab switch
+  const handleTabChange = (newTab: 'ALL' | OrderStatus) => {
+    setActiveTab(newTab);
+    setCurrentPage(1);
+    loadOrders(1, newTab, searchQuery, pageSize);
+  };
+
+  // Handle search submission
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCurrentPage(1);
+    loadOrders(1, activeTab, searchQuery, pageSize);
+  };
+
+  // Handle clearing search
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setCurrentPage(1);
+    loadOrders(1, activeTab, '', pageSize);
+  };
 
   // Handle direct status updates
   const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
     try {
       setProcessingId(orderId);
       await shopkeeperService.updateOrderStatus(orderId, newStatus, undefined, user?.token);
-      await loadOrders();
+      await loadOrders(currentPage, activeTab, searchQuery, pageSize);
     } catch (err) {
       alert((err as Error).message || 'Failed to update order status');
     } finally {
@@ -69,7 +124,7 @@ export const ShopkeeperDashboardPage: React.FC = () => {
     }
   };
 
-  // Metrics summary
+  // Metrics summary based on visible page
   const metrics = useMemo(() => {
     const pending = orders.filter((o) => o.status === 'SUBMITTED').length;
     const printing = orders.filter((o) => o.status === 'PRINTING' || o.status === 'ACCEPTED').length;
@@ -80,18 +135,6 @@ export const ShopkeeperDashboardPage: React.FC = () => {
 
     return { pending, printing, completed, revenue };
   }, [orders]);
-
-  // Filtered orders
-  const filteredOrders = useMemo(() => {
-    return orders.filter((order) => {
-      const matchesTab = activeTab === 'ALL' || order.status === activeTab;
-      const matchesSearch =
-        order.orderNumber.includes(searchQuery) ||
-        order.document.originalName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (order.customerName && order.customerName.toLowerCase().includes(searchQuery.toLowerCase()));
-      return matchesTab && matchesSearch;
-    });
-  }, [orders, activeTab, searchQuery]);
 
   const formatTime = (isoString: string) => {
     const d = new Date(isoString);
@@ -113,8 +156,9 @@ export const ShopkeeperDashboardPage: React.FC = () => {
           <button
             type="button"
             className="btn btn-secondary btn-sm"
-            onClick={() => loadOrders(true)}
-            disabled={isRefreshing}
+            onClick={() => loadOrders(currentPage, activeTab, searchQuery, pageSize, true)}
+            disabled={isRefreshing || isLoading}
+            title="Refresh current page"
           >
             <RefreshCw size={15} className={isRefreshing ? 'animate-spin' : ''} />
             <span>Refresh</span>
@@ -155,7 +199,7 @@ export const ShopkeeperDashboardPage: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ fontSize: '0.8rem', color: '#92400e', fontWeight: 700, textTransform: 'uppercase' }}>
-                  New / Incoming
+                  Pending Requests
                 </div>
                 <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '0.2rem', color: '#78350f' }}>
                   {metrics.pending}
@@ -183,7 +227,7 @@ export const ShopkeeperDashboardPage: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
-                  Completed Today
+                  Completed
                 </div>
                 <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '0.2rem' }}>
                   {metrics.completed}
@@ -197,7 +241,7 @@ export const ShopkeeperDashboardPage: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
-                  Revenue Today
+                  Page Revenue
                 </div>
                 <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '0.2rem', color: 'var(--color-primary)' }}>
                   ₹{metrics.revenue}
@@ -222,15 +266,15 @@ export const ShopkeeperDashboardPage: React.FC = () => {
           {/* Status Filter Tabs */}
           <div style={{ display: 'flex', gap: '0.4rem', backgroundColor: '#e2e8f0', padding: '0.3rem', borderRadius: 'var(--radius-md)' }}>
             {[
-              { key: 'ALL', label: `All (${orders.length})` },
-              { key: 'SUBMITTED', label: `New (${orders.filter((o) => o.status === 'SUBMITTED').length})` },
-              { key: 'PRINTING', label: `Printing (${orders.filter((o) => o.status === 'PRINTING' || o.status === 'ACCEPTED').length})` },
-              { key: 'COMPLETED', label: `Done (${orders.filter((o) => o.status === 'COMPLETED').length})` },
+              { key: 'ALL', label: 'All Orders' },
+              { key: 'SUBMITTED', label: 'New' },
+              { key: 'PRINTING', label: 'Printing' },
+              { key: 'COMPLETED', label: 'Completed' },
             ].map((tab) => (
               <button
                 key={tab.key}
                 type="button"
-                onClick={() => setActiveTab(tab.key as typeof activeTab)}
+                onClick={() => handleTabChange(tab.key as typeof activeTab)}
                 style={{
                   padding: '0.45rem 0.85rem',
                   borderRadius: 'var(--radius-sm)',
@@ -241,6 +285,7 @@ export const ShopkeeperDashboardPage: React.FC = () => {
                   backgroundColor: activeTab === tab.key ? 'var(--color-surface)' : 'transparent',
                   color: activeTab === tab.key ? 'var(--color-text-main)' : 'var(--color-text-muted)',
                   boxShadow: activeTab === tab.key ? 'var(--shadow-sm)' : 'none',
+                  transition: 'all 0.15s ease',
                 }}
               >
                 {tab.label}
@@ -248,22 +293,44 @@ export const ShopkeeperDashboardPage: React.FC = () => {
             ))}
           </div>
 
-          {/* Search box */}
-          <div style={{ position: 'relative', width: '260px' }}>
+          {/* Search box with submit and clear */}
+          <form onSubmit={handleSearchSubmit} style={{ position: 'relative', width: '280px', display: 'flex' }}>
             <input
               type="text"
-              placeholder="Search #order, file or name..."
+              placeholder="Search #order or phone (press Enter)..."
               className="input-text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ paddingLeft: '2.3rem', fontSize: '0.85rem', height: '38px' }}
+              style={{ paddingLeft: '2.3rem', paddingRight: searchQuery ? '2rem' : '0.75rem', fontSize: '0.85rem', height: '38px', width: '100%' }}
             />
             <Search
               size={16}
               color="var(--color-text-subtle)"
-              style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)' }}
+              style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
             />
-          </div>
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                style={{
+                  position: 'absolute',
+                  right: '0.5rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--color-text-subtle)',
+                  padding: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+                title="Clear search"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </form>
         </div>
 
         {/* Orders Table */}
@@ -272,7 +339,7 @@ export const ShopkeeperDashboardPage: React.FC = () => {
             <RefreshCw size={28} className="animate-spin" color="var(--color-primary)" />
             <p style={{ marginTop: '0.75rem', color: 'var(--color-text-muted)' }}>Loading orders...</p>
           </div>
-        ) : filteredOrders.length === 0 ? (
+        ) : orders.length === 0 ? (
           <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
             <FileText size={36} color="var(--color-text-subtle)" style={{ margin: '0 auto 0.75rem auto' }} />
             <h3 style={{ fontSize: '1.1rem', margin: '0 0 0.25rem 0' }}>No orders found</h3>
@@ -281,91 +348,104 @@ export const ShopkeeperDashboardPage: React.FC = () => {
             </p>
           </div>
         ) : (
-          <div className="table-wrapper">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Order</th>
-                  <th>Customer</th>
-                  <th>Document</th>
-                  <th>Specs</th>
-                  <th>Status</th>
-                  <th>Price</th>
-                  <th>Time</th>
-                  <th style={{ textAlign: 'right' }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredOrders.map((order) => (
-                  <tr
-                    key={order.id}
-                    onClick={() => navigate(`/dashboard/orders/${order.id}`)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <td>
-                      <span style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--color-primary)' }}>
-                        #{order.orderNumber}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{order.customerName || 'Anonymous'}</div>
-                      {order.customerPhone && (
-                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                          {order.customerPhone}
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      <div
-                        style={{
-                          fontWeight: 600,
-                          maxWidth: '200px',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                        title={order.document.originalName}
-                      >
-                        {order.document.originalName}
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                        {order.calculatedPages} {order.calculatedPages === 1 ? 'page' : 'pages'}
-                        {order.config.pageSelection.type !== 'ALL' && ` (${order.config.pageSelection.type})`}
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                        {order.config.copies} × {order.config.paperSize} ({order.config.printType})
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                        {order.config.side === 'SINGLE' ? 'Single-sided' : 'Double-sided'}
-                      </div>
-                    </td>
-                    <td>
-                      <StatusBadge status={order.status} />
-                    </td>
-                    <td>
-                      <span style={{ fontWeight: 800, fontSize: '1rem' }}>₹{order.estimatedPrice}</span>
-                    </td>
-                    <td style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                      {formatTime(order.createdAt)}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <OrderActionButtons
-                        status={order.status}
-                        size="sm"
-                        isProcessing={processingId === order.id}
-                        onAccept={() => handleStatusChange(order.id, 'ACCEPTED')}
-                        onReject={() => handleStatusChange(order.id, 'REJECTED')}
-                        onStartPrinting={() => handleStatusChange(order.id, 'PRINTING')}
-                        onComplete={() => handleStatusChange(order.id, 'COMPLETED')}
-                      />
-                    </td>
+          <>
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Order</th>
+                    <th>Customer</th>
+                    <th>Document</th>
+                    <th>Specs</th>
+                    <th>Status</th>
+                    <th>Price</th>
+                    <th>Time</th>
+                    <th style={{ textAlign: 'right' }}>Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {orders.map((order) => (
+                    <tr
+                      key={order.id}
+                      onClick={() => navigate(`/dashboard/orders/${order.id}`)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <td>
+                        <span style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--color-primary)' }}>
+                          #{order.orderNumber}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{order.customerName || 'Anonymous'}</div>
+                        {order.customerPhone && (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                            {order.customerPhone}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <div
+                          style={{
+                            fontWeight: 600,
+                            maxWidth: '200px',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                          title={order.document.originalName}
+                        >
+                          {order.document.originalName}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                          {order.calculatedPages} {order.calculatedPages === 1 ? 'page' : 'pages'}
+                          {order.config.pageSelection.type !== 'ALL' && ` (${order.config.pageSelection.type})`}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                          {order.config.copies} × {order.config.paperSize} ({order.config.printType})
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                          {order.config.side === 'SINGLE' ? 'Single-sided' : 'Double-sided'}
+                        </div>
+                      </td>
+                      <td>
+                        <StatusBadge status={order.status} />
+                      </td>
+                      <td>
+                        <span style={{ fontWeight: 800, fontSize: '1rem' }}>₹{order.estimatedPrice}</span>
+                      </td>
+                      <td style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                        {formatTime(order.createdAt)}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <OrderActionButtons
+                          status={order.status}
+                          size="sm"
+                          isProcessing={processingId === order.id}
+                          onAccept={() => handleStatusChange(order.id, 'ACCEPTED')}
+                          onReject={() => handleStatusChange(order.id, 'REJECTED')}
+                          onStartPrinting={() => handleStatusChange(order.id, 'PRINTING')}
+                          onComplete={() => handleStatusChange(order.id, 'COMPLETED')}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls at Bottom */}
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={totalOrders}
+              pageSize={pageSize}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+              isLoading={isLoading || isRefreshing}
+            />
+          </>
         )}
       </main>
     </>

@@ -50,7 +50,7 @@ export const AppRoutes: React.FC = () => {
 
       {/* Shopkeeper Authentication & Registration */}
       <Route path="/login" element={<ShopkeeperLoginPage />} />
-      <Route path="/admin/login" element={<Navigate to="/login" replace />} />
+      <Route path="/admin/login" element={<ShopkeeperLoginPage />} />
       <Route path="/register" element={<ShopkeeperRegisterPage />} />
       <Route path="/admin/register" element={<Navigate to="/register" replace />} />
 
